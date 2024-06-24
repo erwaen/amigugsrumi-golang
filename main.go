@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 )
@@ -31,10 +30,4 @@ func main() {
 	log.Fatal(server.ListenAndServe())
     log.Fatal(server.ListenAndServe())
 
-}
-
-
-
-func (cfg *apiConfig) handlerReset(w http.ResponseWriter, r *http.Request) {
-	cfg.fileserverHits = 0
 }
