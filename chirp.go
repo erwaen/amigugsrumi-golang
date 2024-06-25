@@ -15,7 +15,8 @@ type returnError struct {
 	Error string `json:"error"`
 }
 type returnValid struct {
-	CleanedBody string `json:"cleaned_body"`
+    Id int `json:"id"`
+	Body string `json:"body"`
 }
 
 func respondWithError(w http.ResponseWriter, code int, msg string) {
@@ -38,7 +39,16 @@ func respondWithJson(w http.ResponseWriter, code int, payload interface{}) {
 	w.Write(data)
 }
 
-func handlerNewChirp(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handlerReadChirps(w http.ResponseWriter, r *http.Request) {
+    chirps, err:= cfg.db.GetChirps()    
+    if err!=nil{
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error getting chirps: %s", err))
+		return
+    }
+    respondWithJson(w, 200, chirps)
+}
+
+func (cfg *apiConfig) handlerNewChirp(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
 	err := decoder.Decode(&params)
@@ -68,9 +78,14 @@ func handlerNewChirp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	valid := returnValid{
-		CleanedBody: strings.Join(wordsList, " "),
+	cleanedBody := strings.Join(wordsList, " ")
+
+	// Save the chirp to the database
+	newChirp, err := cfg.db.CreateChirp(cleanedBody)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error creating chirp: %s", err))
+		return
 	}
 
-	respondWithJson(w, 200, valid)
+	respondWithJson(w, 201, newChirp)
 }

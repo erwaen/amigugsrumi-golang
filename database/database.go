@@ -61,6 +61,7 @@ func (db *DB) ensureDB() error {
 	return nil
 }
 
+
 // loadDB reads the database file into memory
 func (db *DB) loadDB() (DBStructure, error) {
 	fileData, err := os.ReadFile(db.path)
@@ -70,9 +71,9 @@ func (db *DB) loadDB() (DBStructure, error) {
 		log.Fatalf("Error on reading file when loadDB %s", err)
 		return chirps, err
 	}
-	err = json.Unmarshal(fileData, chirps)
+	err = json.Unmarshal(fileData, &chirps)
 	if err != nil {
-		log.Fatal("Error on unmarshal file when loadDB %s", err)
+		log.Fatalf("Error on unmarshal file when loadDB %s", err)
 		return chirps, err
 	}
 	return chirps, nil
@@ -113,7 +114,7 @@ func (db *DB) CreateChirp(body string) (types.Chirp, error) {
 			newID = id
 		}
 	}
-
+    newID++
 	newChirp := types.Chirp{
 		Id:   newID,
 		Body: body,
