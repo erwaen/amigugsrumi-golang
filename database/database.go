@@ -7,9 +7,11 @@ import (
 	"os"
 	"sort"
 	"sync"
-
+    "errors"
 	"github.com/erwaen/Chirpy/types"
 )
+
+var ErrNotExist = errors.New("resource does not exist")
 
 type DB struct {
 	path string
@@ -18,6 +20,7 @@ type DB struct {
 
 type DBStructure struct {
 	Chirps map[int]types.Chirp `json:"chirps"`
+    Users map[int]types.User `json:"users"`
 }
 
 func newDBStructure() DBStructure {
@@ -66,17 +69,17 @@ func (db *DB) ensureDB() error {
 func (db *DB) loadDB() (DBStructure, error) {
 	fileData, err := os.ReadFile(db.path)
 
-	chirps := DBStructure{}
+	allData := DBStructure{}
 	if err != nil {
 		log.Fatalf("Error on reading file when loadDB %s", err)
-		return chirps, err
+		return allData, err
 	}
-	err = json.Unmarshal(fileData, &chirps)
+	err = json.Unmarshal(fileData, &allData)
 	if err != nil {
 		log.Fatalf("Error on unmarshal file when loadDB %s", err)
-		return chirps, err
+		return allData, err
 	}
-	return chirps, nil
+	return allData, nil
 
 }
 
@@ -144,4 +147,18 @@ func (db *DB) writeDB(dbStructure DBStructure) error {
 		return err
 	}
 	return nil 
+}
+
+func (db *DB) GetChirp(id int) (types.Chirp, error) {
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return types.Chirp{}, err
+	}
+
+	chirp, ok := dbStructure.Chirps[id]
+	if !ok {
+		return types.Chirp{}, ErrNotExist
+	}
+
+	return chirp, nil
 }

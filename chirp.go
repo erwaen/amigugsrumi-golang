@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
+
+	"github.com/erwaen/Chirpy/database"
 )
 
 type parameters struct {
@@ -15,7 +18,7 @@ type returnError struct {
 	Error string `json:"error"`
 }
 type returnValid struct {
-    Id int `json:"id"`
+	Id   int    `json:"id"`
 	Body string `json:"body"`
 }
 
@@ -40,12 +43,32 @@ func respondWithJson(w http.ResponseWriter, code int, payload interface{}) {
 }
 
 func (cfg *apiConfig) handlerReadChirps(w http.ResponseWriter, r *http.Request) {
-    chirps, err:= cfg.db.GetChirps()    
-    if err!=nil{
+	idString := r.PathValue("id")
+	if idString != "" {
+		id, err := strconv.Atoi(idString)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid ID parameter")
+			return
+		}
+
+		chirp, err := cfg.db.GetChirp(id)
+		if err != nil {
+			if err == database.ErrNotExist{
+				respondWithError(w, http.StatusNotFound, "Chirp Not found")
+			} else {
+				respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("error retrieving chirp: %s", err))
+			}
+			return
+		}
+		respondWithJson(w, http.StatusOK, chirp)
+		return
+	}
+	chirps, err := cfg.db.GetChirps()
+	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error getting chirps: %s", err))
 		return
-    }
-    respondWithJson(w, 200, chirps)
+	}
+	respondWithJson(w, 200, chirps)
 }
 
 func (cfg *apiConfig) handlerNewChirp(w http.ResponseWriter, r *http.Request) {
