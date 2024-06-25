@@ -32,7 +32,6 @@ func (cfg *apiConfig) handlerNewUser(w http.ResponseWriter, r *http.Request) {
 	newUser, err := cfg.db.CreateUser(params.Email, params.Password)
 	if err != nil {
 		if err == database.ErrUserAlreadyExist {
-
 			respondWithError(w, 400, fmt.Sprintf("Error creating user: %s", err))
 		} else {
 			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error creating user: %s", err))
@@ -71,6 +70,7 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(params.Password))
 	if err != nil {
 		respondWithError(w, 401, fmt.Sprintf("Error logging user: %s", err))
+        return 
 	}
     loggedUser:= types.LoggedUser{
         Id: user.Id,

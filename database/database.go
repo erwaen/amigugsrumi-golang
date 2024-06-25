@@ -26,6 +26,7 @@ type DBStructure struct {
 func newDBStructure() DBStructure {
 	return DBStructure{
 		Chirps: map[int]types.Chirp{},
+        Users: map[int]types.User{},
 	}
 }
 
