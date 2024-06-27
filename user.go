@@ -2,12 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
-
+	"strconv"
+	"github.com/erwaen/Chirpy/auth"
 	"github.com/erwaen/Chirpy/database"
-	"github.com/erwaen/Chirpy/types"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type parameterNewUser struct {
@@ -15,9 +15,29 @@ type parameterNewUser struct {
 	Password string `json:"password"`
 }
 
+type parameterLoginUser struct {
+	Email            string `json:"email"`
+	Password         string `json:"password"`
+	ExpiresInSeconds int    `json:"expires_in_seconds"`
+}
+
+type User struct {
+	ID       int    `json:"id"`
+	Email    string `json:"email"`
+	Password string `json:"-"`
+}
+
 func (cfg *apiConfig) handlerNewUser(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	type response struct {
+		User
+	}
+
 	decoder := json.NewDecoder(r.Body)
-	params := parameterNewUser{}
+	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
 		respondWithError(w, 500, fmt.Sprintf("%s", err))
@@ -25,57 +45,85 @@ func (cfg *apiConfig) handlerNewUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if params.Email == "" || params.Password == "" {
 		respondWithError(w, 400, "no email or password field")
+		return
+	}
+
+	hashedPassword, err := auth.HashPassword(params.Password)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't hash password")
 		return
 	}
 
 	// Save the user to the database
-	newUser, err := cfg.db.CreateUser(params.Email, params.Password)
+	newUser, err := cfg.db.CreateUser(params.Email, hashedPassword)
 	if err != nil {
-		if err == database.ErrUserAlreadyExist {
-			respondWithError(w, 400, fmt.Sprintf("Error creating user: %s", err))
-		} else {
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error creating user: %s", err))
+		if errors.Is(err, database.ErrUserAlreadyExist) {
+			respondWithError(w, http.StatusConflict, fmt.Sprintf("Error creating user: %s", err))
+			return
 		}
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create user")
 		return
 	}
 
-	respondWithJson(w, 201, newUser)
+	respondWithJson(w, http.StatusCreated, response{
+		User: User{
+			ID:    newUser.Id,
+			Email: newUser.Email,
+		},
+	})
 }
 
-func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	type response struct {
+		User
+	}
+
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Couldn't find JWT")
+		return
+	}
+	subject, err := auth.ValidateJWT(token, cfg.jwtSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Couldn't validate JWT")
+		return
+	}
+
 	decoder := json.NewDecoder(r.Body)
-	params := parameterNewUser{}
-	err := decoder.Decode(&params)
+	params := parameters{}
+	err = decoder.Decode(&params)
 	if err != nil {
-		respondWithError(w, 500, fmt.Sprintf("%s", err))
-		return
-	}
-	if params.Email == "" || params.Password == "" {
-		respondWithError(w, 400, "no email or password field")
+		respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters")
 		return
 	}
 
-	// get the user from the database
-	user, err := cfg.db.GetUserByEmail(params.Email)
+	hashedPassword, err := auth.HashPassword(params.Password)
 	if err != nil {
-		if err == database.ErrUserAlreadyExist {
-			respondWithError(w, 400, fmt.Sprintf("Error logging user: %s", err))
-		} else {
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error logging user: %s", err))
-		}
+		respondWithError(w, http.StatusInternalServerError, "Couldn't hash password")
 		return
 	}
 
-	//compare passwords
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(params.Password))
+	userIDInt, err := strconv.Atoi(subject)
 	if err != nil {
-		respondWithError(w, 401, fmt.Sprintf("Error logging user: %s", err))
-        return 
+		respondWithError(w, http.StatusInternalServerError, "Couldn't parse user ID")
+		return
 	}
-    loggedUser:= types.LoggedUser{
-        Id: user.Id,
-        Email: user.Email,
-    }
 
-	respondWithJson(w, 200, loggedUser)
+	user, err := cfg.db.UpdateUser(userIDInt, params.Email, hashedPassword)
+	if err != nil {
+		respondWithError(w, 500, "Couldn't create user")
+		return
+	}
+
+	respondWithJson(w, 200, response{
+		User: User{
+			ID:    user.Id,
+			Email: user.Email,
+		},
+	})
 }
+

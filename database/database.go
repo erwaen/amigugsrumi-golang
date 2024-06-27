@@ -2,13 +2,11 @@ package database
 
 import (
 	"encoding/json"
-	"io/fs"
-	"log"
+	"errors"
+	"github.com/erwaen/Chirpy/types"
 	"os"
 	"sort"
 	"sync"
-    "errors"
-	"github.com/erwaen/Chirpy/types"
 )
 
 var ErrNotExist = errors.New("resource does not exist")
@@ -20,74 +18,80 @@ type DB struct {
 
 type DBStructure struct {
 	Chirps map[int]types.Chirp `json:"chirps"`
-    Users map[int]types.User `json:"users"`
+	Users  map[int]types.User  `json:"users"`
 }
 
-func newDBStructure() DBStructure {
-	return DBStructure{
+func (db *DB) createDB() error {
+	dbStructure := DBStructure{
 		Chirps: map[int]types.Chirp{},
-        Users: map[int]types.User{},
+		Users:  map[int]types.User{},
 	}
+    return db.writeDB(dbStructure)
 }
 
 // NewDB creates a new database connection
 // and creates the database file if it doesn't exist
 func NewDB(path string) (*DB, error) {
-	newDB := &DB{
+	db := &DB{
 		path: path,
 		mux:  &sync.RWMutex{},
 	}
-
-	_, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		err := newDB.ensureDB()
-		if err != nil {
-			log.Fatalf("Error on creating new file %s", err)
-			return &DB{}, err
-		}
-	}
-	return newDB, nil
+	err := db.ensureDB()
+	return db, err
 }
 
 // ensureDB creates a new database file if it doesn't exist
 func (db *DB) ensureDB() error {
-	nDBStruct := newDBStructure()
-	data, err := json.Marshal(nDBStruct)
+	_, err := os.ReadFile(db.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return db.createDB()
+	}
+	return err
+}
+
+func (db *DB) ResetDB() error {
+    err:= os.Remove(db.path)
+    if errors.Is(err, os.ErrNotExist){
+        return nil
+    }
+    return db.ensureDB()
+}
+
+// loadDB reads the database file into memory
+func (db *DB) loadDB() (DBStructure, error) {
+    db.mux.RLock()
+    defer db.mux.RUnlock()
+
+    dbStructure := DBStructure{}
+	dat, err := os.ReadFile(db.path)
+    if errors.Is(err, os.ErrNotExist){
+        return dbStructure, err
+    }
+    err = json.Unmarshal(dat, &dbStructure)
+    if err != nil {
+        return dbStructure, err
+    }
+    return dbStructure, nil
+}
+
+// writeDB writes the database file to disk
+func (db *DB) writeDB(dbStructure DBStructure) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+
+	dat, err := json.Marshal(dbStructure)
 	if err != nil {
-		log.Fatalf("Error on marshal new db structure %s", err)
 		return err
 	}
-	error := os.WriteFile(db.path, data, fs.ModePerm)
-	if error != nil {
-		log.Fatalf("Error on writing new file for new db structure %s", err)
+	err = os.WriteFile(db.path, dat,0600) 
+	if err != nil {
 		return err
 	}
 	return nil
 }
 
-
-// loadDB reads the database file into memory
-func (db *DB) loadDB() (DBStructure, error) {
-	fileData, err := os.ReadFile(db.path)
-
-	allData := DBStructure{}
-	if err != nil {
-		log.Fatalf("Error on reading file when loadDB %s", err)
-		return allData, err
-	}
-	err = json.Unmarshal(fileData, &allData)
-	if err != nil {
-		log.Fatalf("Error on unmarshal file when loadDB %s", err)
-		return allData, err
-	}
-	return allData, nil
-
-}
-
 // GetChirps returns all chirps in the database
 func (db *DB) GetChirps() ([]types.Chirp, error) {
-	db.mux.RLock()
-	defer db.mux.RUnlock()
 	chirps, err := db.loadDB()
 	if err != nil {
 		return []types.Chirp{}, err
@@ -118,14 +122,14 @@ func (db *DB) CreateChirp(body string) (types.Chirp, error) {
 			newID = id
 		}
 	}
-    newID++
+	newID++
 	newChirp := types.Chirp{
 		Id:   newID,
 		Body: body,
 	}
 
 	chirps.Chirps[newID] = newChirp
-    err = db.writeDB(chirps)
+	err = db.writeDB(chirps)
 	if err != nil {
 		return types.Chirp{}, err
 	}
@@ -133,22 +137,6 @@ func (db *DB) CreateChirp(body string) (types.Chirp, error) {
 
 }
 
-// writeDB writes the database file to disk
-func (db *DB) writeDB(dbStructure DBStructure) error {
-	db.mux.Lock()
-	defer db.mux.Unlock()
-
-	// save to file again
-	data, err := json.Marshal(dbStructure)
-	if err != nil {
-		return err
-	}
-	err = os.WriteFile(db.path, data, fs.ModePerm)
-	if err != nil {
-		return err
-	}
-	return nil 
-}
 
 func (db *DB) GetChirp(id int) (types.Chirp, error) {
 	dbStructure, err := db.loadDB()

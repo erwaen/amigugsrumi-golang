@@ -3,26 +3,19 @@ package database
 import (
 	"errors"
 	"github.com/erwaen/Chirpy/types"
-	"golang.org/x/crypto/bcrypt"
 )
 
-var ErrUserNotFound = errors.New("user not found")
 var ErrUserAlreadyExist = errors.New("User already exists")
 
 // CreateUser creates a new user and saves it to disk
-func (db *DB) CreateUser(email string, password string) (types.LoggedUser, error) {
-	_, err := db.GetUserByEmail(email)
-
-	// Save the user to the database
-	if err == nil {
-		return types.LoggedUser{}, ErrUserAlreadyExist
-	} else if err != ErrUserNotFound {
-		return types.LoggedUser{}, err
+func (db *DB) CreateUser(email string, password string) (types.User, error) {
+	if _, err := db.GetUserByEmail(email); !errors.Is(err, ErrNotExist) {
+		return types.User{}, ErrUserAlreadyExist
 	}
 
 	allData, err := db.loadDB()
 	if err != nil {
-		return types.LoggedUser{}, err
+		return types.User{}, err
 	}
 
 	newID := 0
@@ -33,29 +26,19 @@ func (db *DB) CreateUser(email string, password string) (types.LoggedUser, error
 	}
 	newID++
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return types.LoggedUser{}, err
-	}
-
-
 	newUser := types.User{
 		Id:       newID,
 		Email:    email,
-		Password: string(hash),
+		Password: password,
 	}
-
 	allData.Users[newID] = newUser
+
 	err = db.writeDB(allData)
 	if err != nil {
-		return types.LoggedUser{}, err
-	}
-	loggdUser := types.LoggedUser{
-		Id:    newUser.Id,
-		Email: newUser.Email,
+		return types.User{}, err
 	}
 
-	return loggdUser, nil
+	return newUser, nil
 }
 
 func (db *DB) GetUserByEmail(email string) (types.User, error) {
@@ -63,17 +46,42 @@ func (db *DB) GetUserByEmail(email string) (types.User, error) {
 	if err != nil {
 		return types.User{}, err
 	}
-	found := false
-	var retUser types.User
 	for _, user := range allDB.Users {
 		if user.Email == email {
-			found = true
-			retUser = user
-			break
+			return user, nil
 		}
 	}
-	if !found {
-		return retUser, ErrUserNotFound
+	return types.User{}, ErrNotExist
+}
+
+func (db *DB) GetUserByID(id int) (types.User, error) {
+	allDB, err := db.loadDB()
+	if err != nil {
+		return types.User{}, err
 	}
-	return retUser, nil
+	user, ok := allDB.Users[id]
+	if !ok {
+		return types.User{}, ErrNotExist
+	}
+	return user, nil
+}
+
+func (db *DB) UpdateUser(id int, email, hashedPassword string) (types.User, error) {
+	allDB, err := db.loadDB()
+	if err != nil {
+		return types.User{}, err
+	}
+	user, ok := allDB.Users[id]
+	if !ok {
+		return types.User{}, ErrNotExist
+	}
+
+	user.Email = email
+	user.Password = hashedPassword
+	allDB.Users[user.Id] = user
+	err = db.writeDB(allDB)
+	if err != nil {
+		return types.User{}, err
+	}
+	return user, nil
 }

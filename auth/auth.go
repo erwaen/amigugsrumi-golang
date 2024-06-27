@@ -1,11 +1,14 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 	"time"
-    "strings"
-    "net/http"
+
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -28,13 +31,21 @@ func MakeJWT(userID int, tokenSecret string, expiresIn time.Duration) (string, e
 	signingKey := []byte(tokenSecret)
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
-
 		Issuer:    "chirpy",
 		IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
 		ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(expiresIn)),
 		Subject:   fmt.Sprintf("%d", userID),
 	})
 	return token.SignedString(signingKey)
+}
+func MakeRefreshT() (string, error) {
+    b:=make([]byte,32)
+    _, err:= rand.Read(b)
+    if err!= nil {
+        return "", err
+    }
+    refrestToken := hex.EncodeToString(b)
+    return refrestToken, nil
 }
 
 func ValidateJWT(tokenString, tokenSecret string) (string, error) {
@@ -64,7 +75,6 @@ func ValidateJWT(tokenString, tokenSecret string) (string, error) {
 	return userIDString, nil
 }
 
-
 func GetBearerToken(headers http.Header) (string, error) {
 	authHeader := headers.Get("Authorization")
 	if authHeader == "" {
@@ -77,4 +87,3 @@ func GetBearerToken(headers http.Header) (string, error) {
 
 	return splitAuth[1], nil
 }
-
