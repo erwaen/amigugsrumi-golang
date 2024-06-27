@@ -2,18 +2,17 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/erwaen/Chirpy/auth"
 	"github.com/erwaen/Chirpy/database"
 )
 
-type parameters struct {
-	Body string `json:"body"`
-}
 type returnError struct {
 	Error string `json:"error"`
 }
@@ -57,7 +56,7 @@ func (cfg *apiConfig) handlerReadChirps(w http.ResponseWriter, r *http.Request) 
 
 		chirp, err := cfg.db.GetChirp(id)
 		if err != nil {
-			if err == database.ErrNotExist{
+			if err == database.ErrNotExist {
 				respondWithError(w, http.StatusNotFound, "Chirp Not found")
 			} else {
 				respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("error retrieving chirp: %s", err))
@@ -75,21 +74,105 @@ func (cfg *apiConfig) handlerReadChirps(w http.ResponseWriter, r *http.Request) 
 	respondWithJson(w, 200, chirps)
 }
 
+func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	subject, err := auth.ValidateJWT(token, cfg.jwtSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Couldn't validate JWT")
+		return
+	}
+
+	userID, err := strconv.Atoi(subject)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't parse user ID")
+		return
+	}
+
+	idString := r.PathValue("id")
+	chirpID, err := strconv.Atoi(idString)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid ID parameter")
+		return
+	}
+
+	chirp, err := cfg.db.GetChirp(chirpID)
+	if err != nil {
+		if err == database.ErrNotExist {
+			respondWithError(w, http.StatusNotFound, "Chirp Not found")
+		} else {
+			respondWithError(w, http.StatusInternalServerError, "Couldn't get the chirp")
+		}
+		return
+	}
+
+    if chirp.AuthorID != userID{
+        respondWithError(w, http.StatusForbidden, "You are not allowed to delete this chirp")
+        return
+    }
+    _, err= cfg.db.DeleteChirp(chirpID)
+    if err!=nil{
+		if err == database.ErrNotExist {
+			respondWithError(w, http.StatusNotFound, "Chirp Not found when trying to delete")
+		} else {
+			respondWithError(w, http.StatusInternalServerError, "Couldn't delete the chirp")
+		}
+    }
+	respondWithoutJson(w, http.StatusNoContent)
+}
+
 func (cfg *apiConfig) handlerNewChirp(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Body string `json:"body"`
+	}
+	type response struct {
+		ID       int    `json:"id"`
+		Body     string `json:"body"`
+		AuthorID int    `json:"author_id"`
+	}
+
+	token, err := auth.GetBearerToken(r.Header)
+	subject, err := auth.ValidateJWT(token, cfg.jwtSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Couldn't validate JWT")
+		return
+	}
+	userID, err := strconv.Atoi(subject)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't parse user ID")
+		return
+	}
+
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
-	err := decoder.Decode(&params)
+	err = decoder.Decode(&params)
 	if err != nil {
-		respondWithError(w, 500, fmt.Sprintf("%s", err))
+		respondWithError(w, 500, "Couldn't decode parameters")
 		return
 	}
-	if params.Body == "" {
-		respondWithError(w, 400, "no body field")
+
+	cleaned, err := validateChirp(params.Body)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if len(params.Body) >= 140 {
-		respondWithError(w, 400, "Chirp is too long")
+
+	// Save the chirp to the database
+	newChirp, err := cfg.db.CreateChirp(cleaned, userID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create chirp")
 		return
+	}
+	respondWithJson(w, http.StatusCreated, response{
+		ID:       newChirp.Id,
+		Body:     newChirp.Body,
+		AuthorID: newChirp.AuthorID,
+	})
+}
+
+func validateChirp(body string) (string, error) {
+	const maxChirpLength = 140
+	if len(body) > maxChirpLength {
+		return "", errors.New("Chirp is too long")
 	}
 
 	BLACK_WORDS := map[string]struct{}{
@@ -97,22 +180,18 @@ func (cfg *apiConfig) handlerNewChirp(w http.ResponseWriter, r *http.Request) {
 		"sharbert":  {},
 		"fornax":    {},
 	}
+	cleaned := getCleanedBody(body, BLACK_WORDS)
+	return cleaned, nil
+}
 
-	wordsList := strings.Split(params.Body, " ")
-	for i, word := range wordsList {
-		if _, exists := BLACK_WORDS[strings.ToLower(word)]; exists {
-			wordsList[i] = "****"
+func getCleanedBody(body string, badWords map[string]struct{}) string {
+	words := strings.Split(body, " ")
+	for i, word := range words {
+		loweredWord := strings.ToLower(word)
+		if _, ok := badWords[loweredWord]; ok {
+			words[i] = "****"
 		}
 	}
-
-	cleanedBody := strings.Join(wordsList, " ")
-
-	// Save the chirp to the database
-	newChirp, err := cfg.db.CreateChirp(cleanedBody)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error creating chirp: %s", err))
-		return
-	}
-
-	respondWithJson(w, 201, newChirp)
+	cleaned := strings.Join(words, " ")
+	return cleaned
 }
