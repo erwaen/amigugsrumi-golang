@@ -42,6 +42,10 @@ func respondWithJson(w http.ResponseWriter, code int, payload interface{}) {
 	w.Write(data)
 }
 
+func respondWithoutJson(w http.ResponseWriter, code int) {
+	w.WriteHeader(code)
+}
+
 func (cfg *apiConfig) handlerReadChirps(w http.ResponseWriter, r *http.Request) {
 	idString := r.PathValue("id")
 	if idString != "" {

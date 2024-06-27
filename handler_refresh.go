@@ -1,63 +1,59 @@
 package main
 
 import (
-	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/erwaen/Chirpy/auth"
+	"github.com/erwaen/Chirpy/database"
 )
 
 func (cfg *apiConfig) handlerRefresh(w http.ResponseWriter, r *http.Request) {
-	type parameters struct {
-		Password         string `json:"password"`
-		Email            string `json:"email"`
-		ExpiresInSeconds int    `json:"expires_in_seconds"`
-	}
 	type response struct {
-		User
-		Token        string `json:"token"`
-		RefreshToken string `json:"refresh_token"`
+		Token string `json:"token"`
 	}
-	decoder := json.NewDecoder(r.Body)
-	params := parameters{}
-	err := decoder.Decode(&params)
+
+	refreshToken, err := auth.GetBearerToken(r.Header)
 	if err != nil {
-		respondWithError(w, 500, "Couldn't decode parameters")
+		respondWithError(w, http.StatusUnauthorized, "Couldn't find JWT")
 		return
 	}
 
-	// get the user from the database
-	user, err := cfg.db.GetUserByEmail(params.Email)
+	rfStruct, err := cfg.db.GetRefreshTokenStruct(refreshToken)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't get user")
+		if errors.Is(err, database.ErrNotExist) {
+			respondWithError(w, http.StatusUnauthorized, "Refresh token doesn't exist")
+		} else {
+			respondWithError(w, http.StatusInternalServerError, "Couldn't get refresh token from db")
+		}
+		return
+	}
+	if time.Now().After(rfStruct.ExpireAt) {
+		respondWithError(w, http.StatusUnauthorized, "Refresh Token expired")
 		return
 	}
 
-	err = auth.CheckPasswordHash(params.Password, user.Password)
+	userID := rfStruct.UserID
+	user, err := cfg.db.GetUserByID(userID)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Invalid password")
+		if errors.Is(err, database.ErrNotExist) {
+			respondWithError(w, http.StatusUnauthorized, "User doesnt exist")
+		} else {
+			respondWithError(w, http.StatusUnauthorized, "Couldn't Retrieve de user")
+		}
 		return
 	}
 
-	defaultExpiration := 60 * 60 * 24
-	if params.ExpiresInSeconds == 0 {
-		params.ExpiresInSeconds = defaultExpiration
-	} else if params.ExpiresInSeconds > defaultExpiration {
-		params.ExpiresInSeconds = defaultExpiration
-	}
-
-	token, err := auth.MakeJWT(user.Id, cfg.jwtSecret, time.Duration(params.ExpiresInSeconds)*time.Second)
+	defaultExpiration := 60 * 60
+	token, err := auth.MakeJWT(user.Id, cfg.jwtSecret, time.Duration(defaultExpiration)*time.Second)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't create JWT")
 		return
 	}
 
 	respondWithJson(w, 200, response{
-		User: User{
-			ID:    user.Id,
-			Email: user.Email,
-		},
 		Token: token,
 	})
+
 }

@@ -50,6 +50,8 @@ func main() {
 	mux.HandleFunc("GET /api/reset", apiCfg.handlerReset)
 
 	mux.HandleFunc("POST /api/login", apiCfg.handlerLogin)
+	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
+	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
 
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerNewChirp)
 	mux.HandleFunc("GET /api/chirps/{id}", apiCfg.handlerReadChirps)
@@ -63,7 +65,7 @@ func main() {
 		Addr:    ":8080",
 		Handler: mux,
 	}
-	log.Printf("Serving files from %s on port: %s\n", ".", 8080)
+	log.Printf("Serving files from %s on port: %s\n", ".", "8080")
 	log.Fatal(server.ListenAndServe())
 
 }
