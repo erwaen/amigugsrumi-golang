@@ -7,6 +7,7 @@ import (
 
 	"github.com/erwaen/Chirpy/auth"
 )
+
 func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Password         string `json:"password"`
@@ -15,8 +16,10 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	type response struct {
 		User
-		Token string `json:"token"`
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
 	}
+
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
 	err := decoder.Decode(&params)
@@ -38,29 +41,35 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-    defaultExpiration := 60*60
-    if params.ExpiresInSeconds ==0{
-        params.ExpiresInSeconds = defaultExpiration
-    } else if params.ExpiresInSeconds > defaultExpiration {
-        params.ExpiresInSeconds = defaultExpiration
-    }
+	defaultExpiration := 60 * 60
+	if params.ExpiresInSeconds == 0 {
+		params.ExpiresInSeconds = defaultExpiration
+	} else if params.ExpiresInSeconds > defaultExpiration {
+		params.ExpiresInSeconds = defaultExpiration
+	}
 
-    token, err:= auth.MakeJWT(user.Id, cfg.jwtSecret, time.Duration(params.ExpiresInSeconds)*time.Second)
-    if err != nil {
-        respondWithError(w, http.StatusInternalServerError, "Couldn't create JWT")
-        return
-    }
-    refreshToken, err:= auth.MakeRefreshT()
-    if err != nil {
-        respondWithError(w, http.StatusInternalServerError, "Couldn't create Refresh Token")
-        return
-    }
+	token, err := auth.MakeJWT(user.Id, cfg.jwtSecret, time.Duration(params.ExpiresInSeconds)*time.Second)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create JWT")
+		return
+	}
+	refreshToken, err := auth.MakeRefreshT()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create Refresh Token")
+		return
+	}
+	_, err = cfg.db.InsertRefreshToken(user.Id, refreshToken, 60*24*time.Hour)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't save refresh token in db")
+		return
+	}
 
-	respondWithJson(w, 200, response {
-        User: User{
-            ID: user.Id,
-            Email: user.Email,
-        },
-        Token: token,
-    })
+	respondWithJson(w, 200, response{
+		User: User{
+			ID:    user.Id,
+			Email: user.Email,
+		},
+		Token:        token,
+		RefreshToken: refreshToken,
+	})
 }

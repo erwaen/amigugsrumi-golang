@@ -17,16 +17,18 @@ type DB struct {
 }
 
 type DBStructure struct {
-	Chirps map[int]types.Chirp `json:"chirps"`
-	Users  map[int]types.User  `json:"users"`
+	Chirps        map[int]types.Chirp           `json:"chirps"`
+	Users         map[int]types.User            `json:"users"`
+	RefreshTokens map[string]types.RefreshToken `json:"refresh_tokens"`
 }
 
 func (db *DB) createDB() error {
 	dbStructure := DBStructure{
-		Chirps: map[int]types.Chirp{},
-		Users:  map[int]types.User{},
+		Chirps:        map[int]types.Chirp{},
+		Users:         map[int]types.User{},
+		RefreshTokens: map[string]types.RefreshToken{},
 	}
-    return db.writeDB(dbStructure)
+	return db.writeDB(dbStructure)
 }
 
 // NewDB creates a new database connection
@@ -50,28 +52,28 @@ func (db *DB) ensureDB() error {
 }
 
 func (db *DB) ResetDB() error {
-    err:= os.Remove(db.path)
-    if errors.Is(err, os.ErrNotExist){
-        return nil
-    }
-    return db.ensureDB()
+	err := os.Remove(db.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return db.ensureDB()
 }
 
 // loadDB reads the database file into memory
 func (db *DB) loadDB() (DBStructure, error) {
-    db.mux.RLock()
-    defer db.mux.RUnlock()
+	db.mux.RLock()
+	defer db.mux.RUnlock()
 
-    dbStructure := DBStructure{}
+	dbStructure := DBStructure{}
 	dat, err := os.ReadFile(db.path)
-    if errors.Is(err, os.ErrNotExist){
-        return dbStructure, err
-    }
-    err = json.Unmarshal(dat, &dbStructure)
-    if err != nil {
-        return dbStructure, err
-    }
-    return dbStructure, nil
+	if errors.Is(err, os.ErrNotExist) {
+		return dbStructure, err
+	}
+	err = json.Unmarshal(dat, &dbStructure)
+	if err != nil {
+		return dbStructure, err
+	}
+	return dbStructure, nil
 }
 
 // writeDB writes the database file to disk
@@ -83,7 +85,7 @@ func (db *DB) writeDB(dbStructure DBStructure) error {
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(db.path, dat,0600) 
+	err = os.WriteFile(db.path, dat, 0600)
 	if err != nil {
 		return err
 	}
@@ -136,7 +138,6 @@ func (db *DB) CreateChirp(body string) (types.Chirp, error) {
 	return newChirp, nil
 
 }
-
 
 func (db *DB) GetChirp(id int) (types.Chirp, error) {
 	dbStructure, err := db.loadDB()
