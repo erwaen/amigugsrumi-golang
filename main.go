@@ -14,12 +14,17 @@ type apiConfig struct {
 	fileserverHits int
 	db             *database.DB
 	jwtSecret      string
+	polkaKey       string
 }
 
 func main() {
 	// Initialize the database
 	godotenv.Load()
 	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET environment variable is not set")
+	}
+	polkaKey := os.Getenv("POLKA_KEY")
 	if jwtSecret == "" {
 		log.Fatal("JWT_SECRET environment variable is not set")
 	}
@@ -41,6 +46,7 @@ func main() {
 		fileserverHits: 0,
 		db:             db,
 		jwtSecret:      jwtSecret,
+		polkaKey:       polkaKey,
 	}
 	mux := http.NewServeMux()
 	fhandler := apiCfg.middlewareMetricsInc(http.StripPrefix("/app/", http.FileServer(http.Dir("."))))
@@ -54,9 +60,11 @@ func main() {
 	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
 
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerNewChirp)
-    mux.HandleFunc("GET /api/chirps", apiCfg.handlerReadChirps)
-    mux.HandleFunc("GET /api/chirps/{id}", apiCfg.handlerReadChirps)
-    mux.HandleFunc("DELETE /api/chirps/{id}", apiCfg.handlerDeleteChirp)
+	mux.HandleFunc("GET /api/chirps", apiCfg.handlerReadChirps)
+	mux.HandleFunc("GET /api/chirps/{id}", apiCfg.handlerReadChirps)
+	mux.HandleFunc("DELETE /api/chirps/{id}", apiCfg.handlerDeleteChirp)
+
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.handlerWBUpgrade)
 
 	mux.HandleFunc("POST /api/users", apiCfg.handlerNewUser)
 	mux.HandleFunc("PUT /api/users", apiCfg.handlerUpdateUser)

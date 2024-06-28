@@ -66,7 +66,15 @@ func (cfg *apiConfig) handlerReadChirps(w http.ResponseWriter, r *http.Request) 
 		respondWithJson(w, http.StatusOK, chirp)
 		return
 	}
-	chirps, err := cfg.db.GetChirps()
+
+	s := r.URL.Query().Get("author_id")
+	sort := r.URL.Query().Get("sort")
+	authorID, err := strconv.Atoi(s)
+	if err != nil {
+		authorID = 0
+	}
+
+	chirps, err := cfg.db.GetChirps(authorID, sort)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error getting chirps: %s", err))
 		return
@@ -105,18 +113,18 @@ func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-    if chirp.AuthorID != userID{
-        respondWithError(w, http.StatusForbidden, "You are not allowed to delete this chirp")
-        return
-    }
-    _, err= cfg.db.DeleteChirp(chirpID)
-    if err!=nil{
+	if chirp.AuthorID != userID {
+		respondWithError(w, http.StatusForbidden, "You are not allowed to delete this chirp")
+		return
+	}
+	_, err = cfg.db.DeleteChirp(chirpID)
+	if err != nil {
 		if err == database.ErrNotExist {
 			respondWithError(w, http.StatusNotFound, "Chirp Not found when trying to delete")
 		} else {
 			respondWithError(w, http.StatusInternalServerError, "Couldn't delete the chirp")
 		}
-    }
+	}
 	respondWithoutJson(w, http.StatusNoContent)
 }
 

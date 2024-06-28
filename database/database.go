@@ -93,18 +93,28 @@ func (db *DB) writeDB(dbStructure DBStructure) error {
 }
 
 // GetChirps returns all chirps in the database
-func (db *DB) GetChirps() ([]types.Chirp, error) {
+func (db *DB) GetChirps(authorID int, sortBy string) ([]types.Chirp, error) {
 	chirps, err := db.loadDB()
 	if err != nil {
 		return []types.Chirp{}, err
 	}
 
 	var chirpList []types.Chirp
+
 	for _, chirp := range chirps.Chirps {
-		chirpList = append(chirpList, chirp)
+		if authorID == 0 || chirp.AuthorID == authorID {
+			chirpList = append(chirpList, chirp)
+		}
+	}
+	// Set default sort order if invalid
+	if sortBy != "asc" && sortBy != "desc" {
+		sortBy = "asc"
 	}
 	sort.Slice(chirpList, func(i, j int) bool {
-		return chirpList[i].Id < chirpList[j].Id
+		if sortBy == "asc" {
+			return chirpList[i].Id < chirpList[j].Id
+		}
+		return chirpList[i].Id > chirpList[j].Id
 	})
 
 	return chirpList, nil
