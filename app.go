@@ -10,7 +10,7 @@ import (
 
 	"github.com/erwaen/Chirpy/database"
 	"github.com/joho/godotenv"
-      _ "github.com/tursodatabase/libsql-client-go/libsql"
+	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 type apiConfig struct {
