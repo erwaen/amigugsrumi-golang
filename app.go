@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/erwaen/Chirpy/tursodb"
+	"github.com/erwaen/Chirpy/types"
+
 	"github.com/erwaen/Chirpy/database"
 	"github.com/joho/godotenv"
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
@@ -18,7 +21,7 @@ type apiConfig struct {
 	db             *database.DB
 	jwtSecret      string
 	polkaKey       string
-	tursoDB        *sql.DB
+	tursoDB        *tursodb.TursoDB
 }
 
 func main() {
@@ -63,18 +66,17 @@ func main() {
 	completeUrl := tursoUrl + "?authToken=" + tursoToken
 	tursoDB, err := sql.Open("libsql", completeUrl)
 	if err != nil {
-		fmt.Println("HOLAERIK erro")
 		log.Fatal("error in connect turso db", err)
 	}
-	fmt.Println("HOLAERIK")
 	defer tursoDB.Close()
+	tursoDBWrapper := tursodb.NewTursoDB(tursoDB)
 
 	apiCfg := apiConfig{
 		fileserverHits: 0,
 		db:             db,
 		jwtSecret:      jwtSecret,
 		polkaKey:       polkaKey,
-		tursoDB:        tursoDB,
+		tursoDB:        tursoDBWrapper,
 	}
 	mux := http.NewServeMux()
 	fhandler := apiCfg.middlewareMetricsInc(http.StripPrefix("/app/", http.FileServer(http.Dir("."))))
@@ -100,6 +102,9 @@ func main() {
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)
 
 	mux.HandleFunc("GET /api/tursousers", apiCfg.handlerTursoUsers)
+	mux.HandleFunc("GET /api/tursoitems", apiCfg.handlerTursoItems)
+	mux.HandleFunc("GET /api/tursoitemsstock", apiCfg.handlerTursoItemsStock)
+
 
 	server := &http.Server{
 		Addr:    ":" + port,
@@ -116,30 +121,51 @@ type TursoUser struct {
 }
 
 func (cfg *apiConfig) handlerTursoUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := cfg.tursoDB.Query("SELECT * FROM users")
+
+	type response struct {
+		Users []types.TursoUser `json:"users"`
+	}
+
+	users, err := cfg.tursoDB.GetUsers()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to execute query: %v\n", err)
-		os.Exit(1)
-	}
-	defer rows.Close()
-
-	var users []TursoUser
-
-	for rows.Next() {
-		var user TursoUser
-
-		if err := rows.Scan(&user.ID, &user.Name); err != nil {
-			fmt.Println("Error scanning row:", err)
-			return
-		}
-
-		users = append(users, user)
-		fmt.Println(user.ID, user.Name)
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error getting users: %s", err))
+		return
 	}
 
-	if err := rows.Err(); err != nil {
-		fmt.Println("Error during rows iteration:", err)
+	respondWithJson(w, http.StatusOK, response{
+		Users: users,
+	})
+
+}
+
+func (cfg *apiConfig) handlerTursoItems(w http.ResponseWriter, r *http.Request) {
+
+	type response struct {
+		Items []types.TursoItem `json:"items"`
 	}
 
-	respondWithJson(w, 200, users)
+	items, err := cfg.tursoDB.GetItems()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error getting items: %s", err))
+		return
+	}
+
+	respondWithJson(w, http.StatusOK, response{
+		Items: items,
+	})
+
+}
+
+func (cfg *apiConfig) handlerTursoItemsStock(w http.ResponseWriter, r *http.Request) {
+	type response struct {
+		Items []types.TursoItemStock `json:"items"`
+	}
+    items, err := cfg.tursoDB.GetItemsStock()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error getting items: %s", err))
+		return
+	}
+	respondWithJson(w, http.StatusOK, response{
+		Items: items,
+	})
 }
