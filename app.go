@@ -105,7 +105,6 @@ func main() {
 	mux.HandleFunc("GET /api/tursoitems", apiCfg.handlerTursoItems)
 	mux.HandleFunc("GET /api/tursoitemsstock", apiCfg.handlerTursoItemsStock)
 
-
 	server := &http.Server{
 		Addr:    ":" + port,
 		Handler: mux,
@@ -137,6 +136,9 @@ func (cfg *apiConfig) handlerTursoUsers(w http.ResponseWriter, r *http.Request) 
 	})
 
 }
+func enableCors(w *http.ResponseWriter) {
+	(*w).Header().Set("Access-Control-Allow-Origin", "*")
+}
 
 func (cfg *apiConfig) handlerTursoItems(w http.ResponseWriter, r *http.Request) {
 
@@ -157,10 +159,11 @@ func (cfg *apiConfig) handlerTursoItems(w http.ResponseWriter, r *http.Request) 
 }
 
 func (cfg *apiConfig) handlerTursoItemsStock(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
 	type response struct {
 		Items []types.TursoItemStock `json:"items"`
 	}
-    items, err := cfg.tursoDB.GetItemsStock()
+	items, err := cfg.tursoDB.GetItemsStock()
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error getting items: %s", err))
 		return
