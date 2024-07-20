@@ -1,6 +1,5 @@
 package types
 
-import "database/sql"
 
 type TursoItem struct {
 	ID          int            `json:"id"`
@@ -31,7 +30,7 @@ type TursoTag struct {
 }
 
 type TursoSize struct {
-	Length sql.NullFloat64 `json:"length"`
-	Width  sql.NullFloat64 `json:"width"`
-	Height sql.NullFloat64 `json:"height"`
+	Length *float64 `json:"length"`
+	Width  *float64 `json:"width"`
+	Height *float64 `json:"height"`
 }
