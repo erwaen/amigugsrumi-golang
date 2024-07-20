@@ -41,7 +41,7 @@ func (t *TursoDB) GetUsers() ([]types.TursoUser, error) {
 func (t *TursoDB) GetItems() ([]types.TursoItem, error) {
 	query := `
 		SELECT 
-			i.id, i.title, i.description, i.image_src, i.image_alt, i.price, i.stock,
+			i.id, i.title, i.description, i.image_src, i.image_alt, i.price, i.stock, i.size_l, i.size_w, i.size_h,
 			t.id, t.url_img, t.color_background, t.tagname
 		FROM 
 			items i
@@ -69,6 +69,9 @@ func (t *TursoDB) GetItems() ([]types.TursoItem, error) {
 			&item.Image.Alt,
 			&item.Price,
 			&item.Stock,
+            &item.Size.Length,
+            &item.Size.Width,
+            &item.Size.Height,
 			&tagID,
 			&urlImg,
 			&colorBackground,
