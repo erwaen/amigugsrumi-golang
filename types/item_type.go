@@ -3,13 +3,14 @@ package types
 
 type TursoItem struct {
 	ID          int            `json:"id"`
-	Title       string         `json:"title"`
-	Description string         `json:"description"`
+	Title       *string         `json:"title"`
+	Description *string         `json:"description"`
 	Image       TursoItemImage `json:"image"`
-	Price       float64        `json:"price"`
-	Stock       int            `json:"stock"`
+	Price       *float64        `json:"price"`
+	Stock       *int            `json:"stock"`
 	Tags        []TursoTag     `json:"tags"`
 	Size        TursoSize      `json:"size"`
+    YarnType    *string         `json:"yarn_type"`
 }
 
 type TursoItemImage struct {
