@@ -1,6 +1,6 @@
 # amigugsrumi-golang
 
-This repository contains the backend code for the website [anniagumi.lat](https://anniagumi.lat). It's responsible for fetching and serving data to display the content on the website.
+The backend code for the website [anniagumi.lat](https://anniagumi.lat). It's responsible for fetching and serving data to display the content on the website.
 
 ## Overview
 
